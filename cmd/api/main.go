@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -16,8 +17,8 @@ func main() {
 		w.Write([]byte(`{"status": "ok"}`))
 	})
 
-	srv := http.Server{
-		Addr:         ":8080",
+	srv := &http.Server{
+		Addr:         ":" + os.Getenv("PORT"),
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 30,
