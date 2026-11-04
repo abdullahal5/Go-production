@@ -1,13 +1,18 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
+
+	"go-prod-project/internal/config"
 )
 
 func main() {
+	cfg := config.MustLoad()
+
+	fmt.Println("Starting this server...")
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -18,7 +23,7 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:         ":" + os.Getenv("PORT"),
+		Addr:         ":" + cfg.Port,
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 30,
