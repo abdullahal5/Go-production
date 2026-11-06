@@ -7,13 +7,23 @@ import (
 	"time"
 
 	"go-prod-project/internal/config"
+	"go-prod-project/internal/db"
 	"go-prod-project/internal/handlers"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
 	cfg := config.MustLoad()
+	_, err := db.Connect(cfg.DatabaseUrl)
 
+	if err != nil {
+		log.Fatalf("main.db.connect: %v", err)
+	}
+
+	fmt.Println("database connected")
 	fmt.Println("Starting this server...")
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", handlers.Health)
