@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"go-prod-project/internal/httpx"
 	"go-prod-project/internal/middleware"
 	"log/slog"
 	"net/http"
@@ -86,7 +87,8 @@ func (lh ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		lh.logger.Error("delete failed", "listing_id", id, "request_id", requestId, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInvalidId)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
