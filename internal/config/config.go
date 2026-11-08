@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -13,19 +14,20 @@ type Config struct {
 }
 
 func MustLoad() Config {
-	godotenv.Load()
+	// Attempt to load .env if present (non-fatal if absent in Docker/prod)
+	_ = godotenv.Load()
 
-	port := os.Getenv("PORT")
+	port := strings.Trim(os.Getenv("PORT"), "\"'")
 	if port == "" {
-		panic("PORT is required")
+		port = "8080"
 	}
 
-	env := os.Getenv("ENV")
+	env := strings.Trim(os.Getenv("ENV"), "\"'")
 	if env == "" {
-		panic("ENV is required")
+		env = "development"
 	}
 
-	databaseUrl := os.Getenv("DATABASE_URL")
+	databaseUrl := strings.Trim(os.Getenv("DATABASE_URL"), "\"'")
 	if databaseUrl == "" {
 		panic("DATABASE_URL is required")
 	}

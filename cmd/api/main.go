@@ -58,7 +58,7 @@ func run() error {
 	// 8. Initialize HTTP server.
 	addr := os.Getenv("HTTP_ADDR")
 	if addr == "" {
-		addr = ":8080"
+		addr = ":" + cfg.Port
 	}
 
 	httpServer := &http.Server{

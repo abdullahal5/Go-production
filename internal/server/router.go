@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"go-prod-project/internal/middleware"
 )
 
@@ -19,13 +21,17 @@ func NewRouter(
 		_, _ = w.Write([]byte("OK"))
 	})
 
+	// Prometheus metrics endpoint
+	mux.Handle("GET /metrics", promhttp.Handler())
+
 	// Listing REST endpoints
 	mux.HandleFunc("POST /listings", listingHandler.Create)
 	mux.HandleFunc("GET /listings", listingHandler.List)
 	mux.HandleFunc("GET /listings/{id}", listingHandler.GetByID)
 	mux.HandleFunc("DELETE /listings/{id}", listingHandler.Delete)
 
-	return middleware.RequestId(mux)
+	// Middleware chain: RequestId -> Prometheus Metrics -> Router
+	return middleware.RequestId(middleware.Metrics(mux))
 }
 
 // LogRouter is a middleware helper for request logging if needed.
