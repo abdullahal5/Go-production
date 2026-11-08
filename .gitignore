@@ -5,8 +5,6 @@
 /dist/
 
 # Environment variables
-.env
-.env.*
 !.env.example
 
 # Go test artifacts
@@ -16,7 +14,8 @@ coverage.*
 
 # IDE
 .idea/
-.vscode/
 
 # OS
 .DS_Store
+config.bat
+node_modules
