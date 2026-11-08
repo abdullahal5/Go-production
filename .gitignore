@@ -1,3 +1,22 @@
-bin
+
+# Build artifacts
+/bin/
+/tmp/
+/dist/
+
+# Environment variables
 .env
-.vscode
+.env.*
+!.env.example
+
+# Go test artifacts
+*.test
+*.out
+coverage.*
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

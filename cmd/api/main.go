@@ -1,58 +1,118 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	listingapp "go-prod-project/internal/application/listing"
 	"go-prod-project/internal/config"
 	"go-prod-project/internal/db"
-	"go-prod-project/internal/handlers"
-	"go-prod-project/internal/middleware"
+	"go-prod-project/internal/infrastructure/postgres"
+	"go-prod-project/internal/server"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
-	cfg := config.MustLoad()
-	db, err := db.Connect(cfg.DatabaseUrl)
-
-	if err != nil {
-		log.Fatalf("main.db.connect: %v", err)
+	if err := run(); err != nil {
+		log.Fatal(err)
 	}
+}
 
-	logHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: true,
-		Level:     slog.LevelInfo,
-	})
+func run() error {
+	// 1. Load application configuration.
+	cfg := config.MustLoad()
 
-	logger := slog.New(logHandler)
+	// 2. Initialize logger.
+	logger := slog.New(
+		slog.NewJSONHandler(os.Stdout, nil),
+	)
 	slog.SetDefault(logger)
 
-	fmt.Println("database connected")
-	fmt.Println("Starting this server...")
+	// 3. Connect to PostgreSQL (Database Connection Pool).
+	database, err := db.Connect(cfg.DatabaseUrl)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
 
-	lh := handlers.NewListingHandler(db, logger)
+	// 4. [DDD Infrastructure Layer] Initialize secondary adapter (PostgreSQL repository).
+	listingRepository := postgres.NewListingRepository(database)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", handlers.Health)
-	mux.HandleFunc("GET /listings", lh.List)
-	mux.HandleFunc("DELETE /listings/{id}", lh.Delete)
-	mux.HandleFunc("POST /listings", lh.Create)
+	// 5. [DDD Application Layer] Initialize application service with the repository port.
+	listingService := listingapp.NewService(listingRepository)
 
-	handler := middleware.RequestId(mux)
-	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  time.Second * 10,
-		WriteTimeout: time.Second * 30,
-		IdleTimeout:  time.Second * 60,
+	// 6. [DDD Presentation Layer] Initialize primary adapter (HTTP REST handler).
+	listingHandler := server.NewListingHandler(listingService, logger)
+
+	// 7. [Composition Root] Initialize HTTP router and routes.
+	router := server.NewRouter(listingHandler)
+
+	// 8. Initialize HTTP server.
+	addr := os.Getenv("HTTP_ADDR")
+	if addr == "" {
+		addr = ":8080"
 	}
 
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	httpServer := &http.Server{
+		Addr:         addr,
+		Handler:      router,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+
+	// 9. Handle OS shutdown signals for graceful shutdown.
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		logger.Info("HTTP server starting", "address", addr)
+
+		serverErrors <- httpServer.ListenAndServe()
+	}()
+
+	// 10. Wait for server failure or shutdown signal.
+	select {
+	case err := <-serverErrors:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+
+	case <-ctx.Done():
+		logger.Info("shutdown signal received")
+
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			10*time.Second,
+		)
+		defer cancel()
+
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			_ = httpServer.Close()
+			return err
+		}
+
+		err := <-serverErrors
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+
+		logger.Info("HTTP server stopped gracefully")
+	}
+
+	return nil
 }
